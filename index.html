@@ -349,7 +349,7 @@ button, input { font-family: inherit; }
     $('sync').classList.toggle('bad', failed || stale);
     $('syncText').textContent = (stale ? 'Not updated since ' : 'Cin7 synced ') + fmtTime(envelope.checked_at);
     const alert = $('alert');
-    if (failed) { alert.hidden = false; alert.textContent = data.message || 'The last stock check did not complete.'; }
+    if (failed) { alert.hidden = false; alert.textContent = envelope.message || data.message || 'The last stock check did not complete. Figures below are from the last good check.'; }
     else if (stale) { alert.hidden = false; alert.textContent = 'The stock check has not run for over 20 hours. Figures below may be out of date.'; }
     else { alert.hidden = true; }
     renderList();
