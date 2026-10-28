@@ -98,7 +98,10 @@ button, input { font-family: inherit; }
 .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--text); }
 .tab .c { margin-left: 8px; font-size: 12px; color: var(--muted); }
 .tabnote { margin-top: 12px; text-transform: none; letter-spacing: .02em; line-height: 1.5; }
-.tools { margin-top: 18px !important; }
+.tools { margin-top: 34px; }
+.miss-tag { font-size: 10px; letter-spacing: .06em; color: var(--muted); border: 1px solid var(--line2); border-radius: 999px; padding: 2px 8px; }
+.sold-tag { font-size: 10px; letter-spacing: .06em; color: var(--move); border: 1px solid #24435a; border-radius: 999px; padding: 2px 8px; }
+.subhead { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 12px 2px 4px; }
 .expand-all { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 6px 0; font-family: inherit; }
 .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; border-top: 1px solid var(--line); }
 @media (max-width: 640px) {
@@ -143,16 +146,12 @@ button, input { font-family: inherit; }
       <div class="split"><div id="barMove" style="background:var(--move)"></div><div id="barOrder" style="background:var(--order)"></div></div>
     </div>
 
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" data-t="short" aria-selected="true">Sold, below target<span class="c" id="tShort"></span></button>
-      <button class="tab" role="tab" data-t="missing" aria-selected="false">In K6, not on the floor<span class="c" id="tMissing"></span></button>
-    </div>
-    <p class="tabnote sub" id="tabNote"></p>
     <div class="tools">
       <button class="chip" data-f="all" aria-pressed="true">All<span class="c" id="cAll"></span></button>
+      <button class="chip" data-f="sold" aria-pressed="false">Sold<span class="c" id="cSold"></span></button>
       <button class="chip" data-f="move" aria-pressed="false">Move<span class="c" id="cMove"></span></button>
       <button class="chip" data-f="order" aria-pressed="false">Order<span class="c" id="cOrder"></span></button>
-      <button class="chip" data-f="onorder" aria-pressed="false">On order<span class="c" id="cOn"></span></button>
+      <button class="chip" data-f="missing" aria-pressed="false">Not on floor<span class="c" id="cMiss"></span></button>
       <input class="search" id="q" type="search" placeholder="Search product, brand or SKU" aria-label="Search">
     </div>
     <button class="expand-all" id="expandAll" type="button">Open all brands</button>
@@ -173,7 +172,7 @@ button, input { font-family: inherit; }
     set(v) { try { localStorage.setItem(PW_KEY, v); } catch (e) {} },
     clear() { try { localStorage.removeItem(PW_KEY); } catch (e) {} }
   };
-  let data = null, envelope = null, filter = 'all', query = '', password = null, tab = 'short';
+  let data = null, envelope = null, filter = 'all', query = '', password = null;
   const kindOf = (r) => r.kind === 'missing' ? 'missing' : 'short';
 
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -242,10 +241,9 @@ button, input { font-family: inherit; }
     return p;
   }
 
-  const openBrands = new Set();
-  let allOpen = false;
-  let closedShort = false;
-
+  const openState = new Map();
+  const missOpen = new Map();
+  let bulk = null;
   function productRow(r) {
     const row = document.createElement('div');
     row.className = 'row';
@@ -266,11 +264,12 @@ button, input { font-family: inherit; }
   function renderList() {
     const list = $('list');
     list.textContent = '';
-    const all = (data.rows || []).filter((r) => kindOf(r) === tab);
+    const all = data.rows || [];
     const rows = all.filter((r) => {
+      if (filter === 'sold' && kindOf(r) !== 'short') return false;
+      if (filter === 'missing' && kindOf(r) !== 'missing') return false;
       if (filter === 'move' && !(n(r.move) > 0)) return false;
       if (filter === 'order' && !(n(r.order) > 0)) return false;
-      if (filter === 'onorder' && !(n(r.on_order) > 0)) return false;
       if (query) {
         const hay = `${r.product} ${r.brand} ${r.sku}`.toLowerCase();
         if (!hay.includes(query)) return false;
@@ -280,7 +279,7 @@ button, input { font-family: inherit; }
     $('expandAll').hidden = !rows.length;
     if (!all.length) {
       const e = document.createElement('p'); e.className = 'empty';
-      e.textContent = tab === 'missing' ? 'Nothing is sitting in K6 without a spot on the floor.' : 'Everything on the floor is at target.';
+      e.textContent = 'Everything on the floor is at target and nothing is waiting in K6.';
       list.appendChild(e); return;
     }
     if (!rows.length) {
@@ -290,22 +289,32 @@ button, input { font-family: inherit; }
     }
     const groups = new Map();
     for (const r of rows) {
-      const b = (r.brand || 'Other').trim() || 'Other';
+      const b = (r.brand || 'Other').trim().toUpperCase() || 'OTHER';
       if (!groups.has(b)) groups.set(b, []);
       groups.get(b).push(r);
     }
-    const summary = [...groups.entries()].map(([brand, items]) => ({
-      brand, items,
-      zero: items.filter((r) => n(r.store) === 0).length,
-      move: items.reduce((a, r) => a + n(r.move), 0),
-      order: items.reduce((a, r) => a + n(r.order), 0),
-    }));
-    summary.sort((a, b) => (b.zero > 0) - (a.zero > 0) || (b.move + b.order) - (a.move + a.order) || a.brand.localeCompare(b.brand));
-    const forceOpen = allOpen || !!query || summary.length === 1 || (tab === 'short' && !closedShort);
-    $('expandAll').textContent = forceOpen && !query ? 'Close all brands' : 'Open all brands';
+    const summary = [...groups.entries()].map(([brand, items]) => {
+      const sold = items.filter((r) => kindOf(r) === 'short');
+      const miss = items.filter((r) => kindOf(r) === 'missing');
+      return {
+        brand, items, sold, miss,
+        zero: sold.filter((r) => n(r.store) === 0).length,
+        soldUnits: sold.reduce((a, r) => a + n(r.move) + n(r.order), 0),
+        move: items.reduce((a, r) => a + n(r.move), 0),
+        order: items.reduce((a, r) => a + n(r.order), 0),
+      };
+    });
+    summary.sort((a, b) => (b.sold.length > 0) - (a.sold.length > 0) || b.soldUnits - a.soldUnits || (b.zero > 0) - (a.zero > 0) || (b.move + b.order) - (a.move + a.order) || a.brand.localeCompare(b.brand));
+    const isOpen = (g) => {
+      if (query || summary.length === 1) return true;
+      if (openState.has(g.brand)) return openState.get(g.brand);
+      if (bulk !== null) return bulk;
+      return g.sold.length > 0;
+    };
+    const anyClosed = summary.some((g) => !isOpen(g));
+    $('expandAll').textContent = anyClosed ? 'Open all brands' : 'Close all brands';
     for (const g of summary) {
-      const bkey = tab + ':' + g.brand;
-      const open = forceOpen || openBrands.has(bkey);
+      const open = isOpen(g);
       const head = document.createElement('button');
       head.type = 'button'; head.className = 'brand';
       head.setAttribute('aria-expanded', String(open));
@@ -313,22 +322,36 @@ button, input { font-family: inherit; }
       const chev = document.createElement('span'); chev.className = 'chev'; chev.textContent = '▶'; chev.setAttribute('aria-hidden', 'true');
       const label = document.createElement('span'); label.textContent = g.brand;
       name.append(chev, label);
-      if (g.zero && tab === 'short') { const z = document.createElement('span'); z.className = 'zero-tag'; z.textContent = `${g.zero} at 0 on floor`; name.appendChild(z); }
+      if (g.zero) { const z = document.createElement('span'); z.className = 'zero-tag'; z.textContent = `${g.zero} sold out on floor`; name.appendChild(z); }
+      if (g.sold.length) { const z = document.createElement('span'); z.className = 'sold-tag'; z.textContent = `${g.sold.length} sold`; name.appendChild(z); }
+      if (g.miss.length) { const z = document.createElement('span'); z.className = 'miss-tag'; z.textContent = `${g.miss.length} not on floor`; name.appendChild(z); }
       const st = document.createElement('span'); st.className = 'bstats';
-      const lines = document.createElement('span'); lines.textContent = `${g.items.length} line${g.items.length === 1 ? '' : 's'}`;
-      st.appendChild(lines);
       if (g.move) { const m = document.createElement('span'); m.style.color = 'var(--move)'; m.textContent = `${fmtN(g.move)} to move`; st.appendChild(m); }
       if (g.order) { const o = document.createElement('span'); o.style.color = 'var(--order)'; o.textContent = `${fmtN(g.order)} to order`; st.appendChild(o); }
       head.append(name, st);
       const body = document.createElement('div'); body.className = 'group'; body.hidden = !open;
-      g.items.sort((a, b) => (n(a.store) === 0 ? 0 : 1) - (n(b.store) === 0 ? 0 : 1) || (n(b.move) - n(a.move)) || a.product.localeCompare(b.product));
-      for (const r of g.items) body.appendChild(productRow(r));
+      const addSection = (title, items) => {
+        if (!items.length) return;
+        if (g.sold.length && g.miss.length) { const h = document.createElement('p'); h.className = 'subhead'; h.textContent = title; body.appendChild(h); }
+        items.sort((a, b) => (n(a.store) === 0 ? 0 : 1) - (n(b.store) === 0 ? 0 : 1) || (n(b.move) - n(a.move)) || a.product.localeCompare(b.product));
+        for (const r of items) body.appendChild(productRow(r));
+      };
+      addSection('Sold, below target', g.sold);
+      if (g.sold.length && g.miss.length && filter !== 'missing' && !query && bulk !== true && !missOpen.get(g.brand)) {
+        const more = document.createElement('button');
+        more.type = 'button'; more.className = 'expand-all'; more.style.padding = '12px 2px';
+        more.textContent = `Show ${g.miss.length} in K6 with none on the floor ▸`;
+        more.addEventListener('click', () => { missOpen.set(g.brand, true); renderList(); });
+        body.appendChild(more);
+      } else {
+        addSection('In K6, none on the floor', g.miss);
+      }
       head.addEventListener('click', () => {
-        if (forceOpen && tab === 'short' && !allOpen && !query) { closedShort = true; summary.forEach((x) => openBrands.add(tab + ':' + x.brand)); openBrands.delete(bkey); renderList(); return; }
         const nowOpen = body.hidden;
         body.hidden = !nowOpen;
         head.setAttribute('aria-expanded', String(nowOpen));
-        if (nowOpen) openBrands.add(bkey); else openBrands.delete(bkey);
+        openState.set(g.brand, nowOpen);
+        $('expandAll').textContent = summary.some((x) => x.brand === g.brand ? !nowOpen : !isOpen(x)) ? 'Open all brands' : 'Close all brands';
       });
       list.append(head, body);
     }
@@ -338,21 +361,16 @@ button, input { font-family: inherit; }
     const allRows = data.rows || [];
     const shortRows = allRows.filter((r) => kindOf(r) === 'short');
     const missRows = allRows.filter((r) => kindOf(r) === 'missing');
-    const rows = tab === 'missing' ? missRows : shortRows;
+    const rows = allRows;
     const move = shortRows.reduce((a, r) => a + n(r.move), 0);
     const order = shortRows.reduce((a, r) => a + n(r.order), 0);
     $('sMove').textContent = fmtN(move);
     $('sOrder').textContent = fmtN(order);
     $('sMissing').textContent = fmtN(missRows.length);
-    $('tShort').textContent = shortRows.length;
-    $('tMissing').textContent = missRows.length;
-    $('tabNote').textContent = tab === 'missing'
-      ? `Active products with stock in K6 and none in the store (${fmtN(missRows.reduce((a, r) => a + n(r.warehouse), 0))} units in K6). Suggested move is 1 of each for display. Tap a brand to see its products.`
-      : 'Products that have sold below their floor target since it was set.';
     $('sTracked').textContent = data.tracked ? fmtN(data.tracked) : '—';
     const short = move + order;
     $('splitWrap').hidden = short === 0;
-    $('shortText').textContent = `${fmtN(short)} unit${short === 1 ? '' : 's'} short on the floor`;
+    $('shortText').textContent = `${fmtN(short)} unit${short === 1 ? '' : 's'} sold below target`;
     $('coverText').textContent = `K6 covers ${fmtN(move)}`;
     $('poText').textContent = `${fmtN(order)} need a PO`;
     $('barMove').style.flex = String(move || 0);
@@ -360,9 +378,10 @@ button, input { font-family: inherit; }
     $('barMove').style.display = move ? '' : 'none';
     $('barOrder').style.display = order ? '' : 'none';
     $('cAll').textContent = rows.length;
+    $('cSold').textContent = shortRows.length;
     $('cMove').textContent = rows.filter((r) => n(r.move) > 0).length;
     $('cOrder').textContent = rows.filter((r) => n(r.order) > 0).length;
-    $('cOn').textContent = rows.filter((r) => n(r.on_order) > 0).length;
+    $('cMiss').textContent = missRows.length;
     $('targetSet').textContent = fmtDay(data.target_set);
 
     const ageH = (Date.now() - new Date(envelope.checked_at).getTime()) / 36e5;
@@ -406,26 +425,13 @@ button, input { font-family: inherit; }
     $('app').hidden = true; $('lock').hidden = false; $('pw').value = '';
   });
 
-  document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
-    tab = b.dataset.t;
-    document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
-    filter = 'all';
-    document.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.f === 'all')));
-    render();
-  }));
   document.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => {
     filter = b.dataset.f;
     document.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     renderList();
   }));
   $('q').addEventListener('input', (e) => { query = e.target.value.trim().toLowerCase(); renderList(); });
-  $('expandAll').addEventListener('click', () => {
-    const isOpen = $('expandAll').textContent.startsWith('Close');
-    if (tab === 'short') { closedShort = isOpen; allOpen = !isOpen && closedShort ? true : !isOpen; if (isOpen) { allOpen = false; } }
-    else { allOpen = !isOpen; }
-    if (isOpen) openBrands.clear();
-    renderList();
-  });
+  $('expandAll').addEventListener('click', () => { bulk = $('expandAll').textContent.startsWith('Open'); openState.clear(); missOpen.clear(); renderList(); });
 
   // Refresh quietly every 10 minutes while open.
   setInterval(async () => {
