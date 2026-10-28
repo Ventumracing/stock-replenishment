@@ -93,6 +93,12 @@ button, input { font-family: inherit; }
 .zero-tag { font-size: 10px; letter-spacing: .06em; color: var(--bad); border: 1px solid #4a2a26; border-radius: 999px; padding: 2px 8px; }
 .group[hidden] { display: none; }
 @media (max-width: 640px) { .brand { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
+.tabs { display: flex; gap: 0; margin-top: 36px; border-bottom: 1px solid var(--line2); overflow-x: auto; }
+.tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 400; padding: 10px 2px; margin-right: 26px; cursor: pointer; white-space: nowrap; margin-bottom: -1px; }
+.tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--text); }
+.tab .c { margin-left: 8px; font-size: 12px; color: var(--muted); }
+.tabnote { margin-top: 12px; text-transform: none; letter-spacing: .02em; line-height: 1.5; }
+.tools { margin-top: 18px !important; }
 .expand-all { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 6px 0; font-family: inherit; }
 .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; border-top: 1px solid var(--line); }
 @media (max-width: 640px) {
@@ -128,7 +134,7 @@ button, input { font-family: inherit; }
     <div class="stats">
       <div class="stat"><p class="sub">Units to move</p><p class="num" id="sMove" style="color:var(--move)">—</p></div>
       <div class="stat"><p class="sub">Units to order</p><p class="num" id="sOrder" style="color:var(--order)">—</p></div>
-      <div class="stat"><p class="sub">Already on order</p><p class="num" id="sOnOrder" style="color:var(--soft)">—</p></div>
+      <div class="stat"><p class="sub">In K6, not on floor</p><p class="num" id="sMissing" style="color:var(--text)">—</p></div>
       <div class="stat"><p class="sub">Products tracked</p><p class="num" id="sTracked" style="color:var(--soft)">—</p></div>
     </div>
 
@@ -137,6 +143,11 @@ button, input { font-family: inherit; }
       <div class="split"><div id="barMove" style="background:var(--move)"></div><div id="barOrder" style="background:var(--order)"></div></div>
     </div>
 
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-t="short" aria-selected="true">Sold, below target<span class="c" id="tShort"></span></button>
+      <button class="tab" role="tab" data-t="missing" aria-selected="false">In K6, not on the floor<span class="c" id="tMissing"></span></button>
+    </div>
+    <p class="tabnote sub" id="tabNote"></p>
     <div class="tools">
       <button class="chip" data-f="all" aria-pressed="true">All<span class="c" id="cAll"></span></button>
       <button class="chip" data-f="move" aria-pressed="false">Move<span class="c" id="cMove"></span></button>
@@ -149,7 +160,7 @@ button, input { font-family: inherit; }
     <div class="row head sub"><span></span><span>Product</span><span>Store</span><span>K6</span><span style="color:var(--move)">Move</span><span style="color:var(--order)">Order</span></div>
     <div id="list"></div>
 
-    <p class="foot">Store and K6 (Main Warehouse, Sentinel K6) stock from Cin7, checked daily around 07:15 and 12:45. Store target is the floor quantity set on <span id="targetSet">—</span>. Move = units K6 can cover. Order = units still short after the move and anything already on order.</p>
+    <p class="foot">Store and K6 (Main Warehouse, Sentinel K6) stock from Cin7, checked daily around 07:20 and 12:45. Excluded: marketing material, office assets, samples, workshop screws and bolts, bulk cables, brake pads. Store target is the floor quantity set on <span id="targetSet">—</span>. Move = units K6 can cover. Order = units still short after the move and anything already on order.</p>
   </div>
 </div>
 
@@ -162,7 +173,8 @@ button, input { font-family: inherit; }
     set(v) { try { localStorage.setItem(PW_KEY, v); } catch (e) {} },
     clear() { try { localStorage.removeItem(PW_KEY); } catch (e) {} }
   };
-  let data = null, envelope = null, filter = 'all', query = '', password = null;
+  let data = null, envelope = null, filter = 'all', query = '', password = null, tab = 'short';
+  const kindOf = (r) => r.kind === 'missing' ? 'missing' : 'short';
 
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
   async function decrypt(env, pw) {
@@ -253,7 +265,7 @@ button, input { font-family: inherit; }
   function renderList() {
     const list = $('list');
     list.textContent = '';
-    const all = data.rows || [];
+    const all = (data.rows || []).filter((r) => kindOf(r) === tab);
     const rows = all.filter((r) => {
       if (filter === 'move' && !(n(r.move) > 0)) return false;
       if (filter === 'order' && !(n(r.order) > 0)) return false;
@@ -267,7 +279,7 @@ button, input { font-family: inherit; }
     $('expandAll').hidden = !rows.length;
     if (!all.length) {
       const e = document.createElement('p'); e.className = 'empty';
-      e.textContent = 'Everything on the floor is at target.';
+      e.textContent = tab === 'missing' ? 'Nothing is sitting in K6 without a spot on the floor.' : 'Everything on the floor is at target.';
       list.appendChild(e); return;
     }
     if (!rows.length) {
@@ -291,7 +303,8 @@ button, input { font-family: inherit; }
     const forceOpen = allOpen || !!query || summary.length === 1;
     $('expandAll').textContent = allOpen ? 'Close all brands' : 'Open all brands';
     for (const g of summary) {
-      const open = forceOpen || openBrands.has(g.brand);
+      const bkey = tab + ':' + g.brand;
+      const open = forceOpen || openBrands.has(bkey);
       const head = document.createElement('button');
       head.type = 'button'; head.className = 'brand';
       head.setAttribute('aria-expanded', String(open));
@@ -299,7 +312,7 @@ button, input { font-family: inherit; }
       const chev = document.createElement('span'); chev.className = 'chev'; chev.textContent = '▶'; chev.setAttribute('aria-hidden', 'true');
       const label = document.createElement('span'); label.textContent = g.brand;
       name.append(chev, label);
-      if (g.zero) { const z = document.createElement('span'); z.className = 'zero-tag'; z.textContent = `${g.zero} at 0 on floor`; name.appendChild(z); }
+      if (g.zero && tab === 'short') { const z = document.createElement('span'); z.className = 'zero-tag'; z.textContent = `${g.zero} at 0 on floor`; name.appendChild(z); }
       const st = document.createElement('span'); st.className = 'bstats';
       const lines = document.createElement('span'); lines.textContent = `${g.items.length} line${g.items.length === 1 ? '' : 's'}`;
       st.appendChild(lines);
@@ -313,20 +326,27 @@ button, input { font-family: inherit; }
         const nowOpen = body.hidden;
         body.hidden = !nowOpen;
         head.setAttribute('aria-expanded', String(nowOpen));
-        if (nowOpen) openBrands.add(g.brand); else openBrands.delete(g.brand);
+        if (nowOpen) openBrands.add(bkey); else openBrands.delete(bkey);
       });
       list.append(head, body);
     }
   }
 
   function render() {
-    const rows = data.rows || [];
-    const move = rows.reduce((a, r) => a + n(r.move), 0);
-    const order = rows.reduce((a, r) => a + n(r.order), 0);
-    const onOrder = rows.reduce((a, r) => a + n(r.on_order), 0);
+    const allRows = data.rows || [];
+    const shortRows = allRows.filter((r) => kindOf(r) === 'short');
+    const missRows = allRows.filter((r) => kindOf(r) === 'missing');
+    const rows = tab === 'missing' ? missRows : shortRows;
+    const move = shortRows.reduce((a, r) => a + n(r.move), 0);
+    const order = shortRows.reduce((a, r) => a + n(r.order), 0);
     $('sMove').textContent = fmtN(move);
     $('sOrder').textContent = fmtN(order);
-    $('sOnOrder').textContent = fmtN(onOrder);
+    $('sMissing').textContent = fmtN(missRows.length);
+    $('tShort').textContent = shortRows.length;
+    $('tMissing').textContent = missRows.length;
+    $('tabNote').textContent = tab === 'missing'
+      ? `Active products with stock in K6 and none in the store (${fmtN(missRows.reduce((a, r) => a + n(r.warehouse), 0))} units in K6). Suggested move is 1 of each for display.`
+      : 'Products that have sold below their floor target since it was set.';
     $('sTracked').textContent = data.tracked ? fmtN(data.tracked) : '—';
     const short = move + order;
     $('splitWrap').hidden = short === 0;
@@ -384,6 +404,13 @@ button, input { font-family: inherit; }
     $('app').hidden = true; $('lock').hidden = false; $('pw').value = '';
   });
 
+  document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
+    tab = b.dataset.t;
+    document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+    filter = 'all';
+    document.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.f === 'all')));
+    render();
+  }));
   document.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => {
     filter = b.dataset.f;
     document.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
