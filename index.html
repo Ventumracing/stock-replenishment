@@ -244,6 +244,7 @@ button, input { font-family: inherit; }
 
   const openBrands = new Set();
   let allOpen = false;
+  let closedShort = false;
 
   function productRow(r) {
     const row = document.createElement('div');
@@ -300,8 +301,8 @@ button, input { font-family: inherit; }
       order: items.reduce((a, r) => a + n(r.order), 0),
     }));
     summary.sort((a, b) => (b.zero > 0) - (a.zero > 0) || (b.move + b.order) - (a.move + a.order) || a.brand.localeCompare(b.brand));
-    const forceOpen = allOpen || !!query || summary.length === 1;
-    $('expandAll').textContent = allOpen ? 'Close all brands' : 'Open all brands';
+    const forceOpen = allOpen || !!query || summary.length === 1 || (tab === 'short' && !closedShort);
+    $('expandAll').textContent = forceOpen && !query ? 'Close all brands' : 'Open all brands';
     for (const g of summary) {
       const bkey = tab + ':' + g.brand;
       const open = forceOpen || openBrands.has(bkey);
@@ -323,6 +324,7 @@ button, input { font-family: inherit; }
       g.items.sort((a, b) => (n(a.store) === 0 ? 0 : 1) - (n(b.store) === 0 ? 0 : 1) || (n(b.move) - n(a.move)) || a.product.localeCompare(b.product));
       for (const r of g.items) body.appendChild(productRow(r));
       head.addEventListener('click', () => {
+        if (forceOpen && tab === 'short' && !allOpen && !query) { closedShort = true; summary.forEach((x) => openBrands.add(tab + ':' + x.brand)); openBrands.delete(bkey); renderList(); return; }
         const nowOpen = body.hidden;
         body.hidden = !nowOpen;
         head.setAttribute('aria-expanded', String(nowOpen));
@@ -345,7 +347,7 @@ button, input { font-family: inherit; }
     $('tShort').textContent = shortRows.length;
     $('tMissing').textContent = missRows.length;
     $('tabNote').textContent = tab === 'missing'
-      ? `Active products with stock in K6 and none in the store (${fmtN(missRows.reduce((a, r) => a + n(r.warehouse), 0))} units in K6). Suggested move is 1 of each for display.`
+      ? `Active products with stock in K6 and none in the store (${fmtN(missRows.reduce((a, r) => a + n(r.warehouse), 0))} units in K6). Suggested move is 1 of each for display. Tap a brand to see its products.`
       : 'Products that have sold below their floor target since it was set.';
     $('sTracked').textContent = data.tracked ? fmtN(data.tracked) : '—';
     const short = move + order;
@@ -417,7 +419,13 @@ button, input { font-family: inherit; }
     renderList();
   }));
   $('q').addEventListener('input', (e) => { query = e.target.value.trim().toLowerCase(); renderList(); });
-  $('expandAll').addEventListener('click', () => { allOpen = !allOpen; if (!allOpen) openBrands.clear(); renderList(); });
+  $('expandAll').addEventListener('click', () => {
+    const isOpen = $('expandAll').textContent.startsWith('Close');
+    if (tab === 'short') { closedShort = isOpen; allOpen = !isOpen && closedShort ? true : !isOpen; if (isOpen) { allOpen = false; } }
+    else { allOpen = !isOpen; }
+    if (isOpen) openBrands.clear();
+    renderList();
+  });
 
   // Refresh quietly every 10 minutes while open.
   setInterval(async () => {
