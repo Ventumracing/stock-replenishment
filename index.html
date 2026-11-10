@@ -52,13 +52,14 @@ button, input { font-family: inherit; }
 .alert { margin-top: 16px; border: 1px solid #4a2a26; color: var(--bad); border-radius: 12px; padding: 12px 14px; font-size: 13px; }
 
 /* summary */
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 30px 0 26px; row-gap: 22px; }
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 30px 0 26px; row-gap: 22px; }
 .stat { padding-left: 16px; border-left: 1px solid #22272e; }
 .stat:first-child { border-left: none; padding-left: 0; }
+.num small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: .04em; margin-top: 4px; }
 .num { font-size: 44px; font-weight: 200; letter-spacing: -.02em; line-height: 1.1; margin-top: 8px; }
 @media (max-width: 640px) {
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stat:nth-child(3) { border-left: none; padding-left: 0; }
+  .stat:nth-child(3), .stat:nth-child(5) { border-left: none; padding-left: 0; }
   .num { font-size: 38px; }
 }
 .split-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
@@ -74,7 +75,7 @@ button, input { font-family: inherit; }
 .search:focus { border-color: var(--move); }
 
 /* list */
-.row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 62px 52px 52px 52px; gap: 12px; align-items: center; padding: 13px 2px; border-top: 1px solid var(--line); }
+.row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 52px 62px 52px 52px 52px; gap: 12px; align-items: center; padding: 13px 2px; border-top: 1px solid var(--line); }
 .row.head { border-top: none; padding-bottom: 6px; }
 .row.head span { text-align: center; }
 .row.head span:nth-child(2) { text-align: left; }
@@ -105,7 +106,7 @@ button, input { font-family: inherit; }
 .expand-all { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 6px 0; font-family: inherit; }
 .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; border-top: 1px solid var(--line); }
 @media (max-width: 640px) {
-  .row { grid-template-columns: 34px minmax(0, 1fr) repeat(4, 34px); gap: 6px; }
+  .row { grid-template-columns: 34px minmax(0, 1fr) repeat(5, 34px); gap: 6px; }
   .ring { width: 34px; height: 34px; }
   .v { font-size: 15px; }
   .row.head span { font-size: 9px; }
@@ -135,6 +136,7 @@ button, input { font-family: inherit; }
     <div class="alert" id="alert" hidden></div>
 
     <div class="stats">
+      <div class="stat"><p class="sub">Sold last 7 days</p><p class="num" id="sSold" style="color:var(--text)">—</p></div>
       <div class="stat"><p class="sub">Units to move</p><p class="num" id="sMove" style="color:var(--move)">—</p></div>
       <div class="stat"><p class="sub">Units to order</p><p class="num" id="sOrder" style="color:var(--order)">—</p></div>
       <div class="stat"><p class="sub">In K6, not on floor</p><p class="num" id="sMissing" style="color:var(--text)">—</p></div>
@@ -156,10 +158,10 @@ button, input { font-family: inherit; }
     </div>
     <button class="expand-all" id="expandAll" type="button">Open all brands</button>
 
-    <div class="row head sub"><span></span><span>Product</span><span>Store</span><span>K6</span><span style="color:var(--move)">Move</span><span style="color:var(--order)">Order</span></div>
+    <div class="row head sub"><span></span><span>Product</span><span>Sold 7d</span><span>Store</span><span>K6</span><span style="color:var(--move)">Move</span><span style="color:var(--order)">Order</span></div>
     <div id="list"></div>
 
-    <p class="foot">Store and K6 (Main Warehouse, Sentinel K6) stock from Cin7, checked daily around 07:20 and 12:45. Excluded: marketing material, office assets, samples, workshop screws and bolts, bulk cables, brake pads. Store target is the floor quantity set on <span id="targetSet">—</span>. Move = units K6 can cover. Order = units still short after the move and anything already on order.</p>
+    <p class="foot">Store and K6 (Main Warehouse, Sentinel K6) stock from Cin7, checked daily around 07:20 and 12:45. Excluded: marketing material, office assets, samples, workshop screws and bolts, bulk cables, brake pads. Store target is the floor quantity set on <span id="targetSet">—</span>. Move = units K6 can cover. Order = units still short after the move and anything already on order. Sold = units sold in the last 7 days (small figure: last 30 days), from Cin7's nightly sales report up to <span id="soldTo">—</span>; B2B (Afkar Al Zaman), shipping and service lines are left out.</p>
   </div>
 </div>
 
@@ -254,6 +256,8 @@ button, input { font-family: inherit; }
     mt.textContent = (r.sku || '') + (n(r.on_order) > 0 ? ` · ${n(r.on_order)} on order` : '');
     info.append(nm, mt);
     row.appendChild(info);
+    const hasSold = r.sold7 !== undefined && data.sales;
+    row.appendChild(cell(hasSold ? (n(r.sold7) ? fmtN(r.sold7) : '–') : '—', hasSold && n(r.sold7) ? '' : 'zero', '', hasSold ? `${fmtN(r.sold30)} in 30d` : ''));
     row.appendChild(cell(fmtN(r.store), '', '', `of ${fmtN(r.target)}`));
     row.appendChild(cell(fmtN(r.warehouse), n(r.warehouse) ? '' : 'zero'));
     row.appendChild(cell(n(r.move) ? fmtN(r.move) : '–', n(r.move) ? '' : 'zero', n(r.move) ? 'var(--move)' : ''));
@@ -368,6 +372,10 @@ button, input { font-family: inherit; }
     $('sOrder').textContent = fmtN(order);
     $('sMissing').textContent = fmtN(missRows.length);
     $('sTracked').textContent = data.tracked ? fmtN(data.tracked) : '—';
+    const sales = data.sales;
+    $('sSold').textContent = sales ? fmtN(sales.d7) : '—';
+    if (sales) { const sm = document.createElement('small'); sm.textContent = `${fmtN(sales.d30)} in 30 days`; $('sSold').appendChild(sm); }
+    $('soldTo').textContent = sales && sales.to ? fmtDay(sales.to + 'T12:00:00Z') : '—';
     const short = move + order;
     $('splitWrap').hidden = short === 0;
     $('shortText').textContent = `${fmtN(short)} unit${short === 1 ? '' : 's'} sold below target`;
