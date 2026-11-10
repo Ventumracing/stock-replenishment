@@ -150,7 +150,7 @@ button, input { font-family: inherit; }
 
     <div class="tools">
       <button class="chip" data-f="all" aria-pressed="true">All<span class="c" id="cAll"></span></button>
-      <button class="chip" data-f="sold" aria-pressed="false">Sold<span class="c" id="cSold"></span></button>
+      <button class="chip" data-f="sold" aria-pressed="false">Below target<span class="c" id="cSold"></span></button>
       <button class="chip" data-f="move" aria-pressed="false">Move<span class="c" id="cMove"></span></button>
       <button class="chip" data-f="order" aria-pressed="false">Order<span class="c" id="cOrder"></span></button>
       <button class="chip" data-f="missing" aria-pressed="false">Not on floor<span class="c" id="cMiss"></span></button>
@@ -327,7 +327,7 @@ button, input { font-family: inherit; }
       const label = document.createElement('span'); label.textContent = g.brand;
       name.append(chev, label);
       if (g.zero) { const z = document.createElement('span'); z.className = 'zero-tag'; z.textContent = `${g.zero} sold out on floor`; name.appendChild(z); }
-      if (g.sold.length) { const z = document.createElement('span'); z.className = 'sold-tag'; z.textContent = `${g.sold.length} sold`; name.appendChild(z); }
+      if (g.sold.length) { const z = document.createElement('span'); z.className = 'sold-tag'; z.textContent = `${g.sold.length} below target`; name.appendChild(z); }
       if (g.miss.length) { const z = document.createElement('span'); z.className = 'miss-tag'; z.textContent = `${g.miss.length} not on floor`; name.appendChild(z); }
       const st = document.createElement('span'); st.className = 'bstats';
       if (g.move) { const m = document.createElement('span'); m.style.color = 'var(--move)'; m.textContent = `${fmtN(g.move)} to move`; st.appendChild(m); }
@@ -340,7 +340,7 @@ button, input { font-family: inherit; }
         items.sort((a, b) => (n(a.store) === 0 ? 0 : 1) - (n(b.store) === 0 ? 0 : 1) || (n(b.move) - n(a.move)) || a.product.localeCompare(b.product));
         for (const r of items) body.appendChild(productRow(r));
       };
-      addSection('Sold, below target', g.sold);
+      addSection('Below target', g.sold);
       if (g.sold.length && g.miss.length && filter !== 'missing' && !query && bulk !== true && !missOpen.get(g.brand)) {
         const more = document.createElement('button');
         more.type = 'button'; more.className = 'expand-all'; more.style.padding = '12px 2px';
@@ -378,7 +378,7 @@ button, input { font-family: inherit; }
     $('soldTo').textContent = sales && sales.to ? fmtDay(sales.to + 'T12:00:00Z') : '—';
     const short = move + order;
     $('splitWrap').hidden = short === 0;
-    $('shortText').textContent = `${fmtN(short)} unit${short === 1 ? '' : 's'} sold below target`;
+    $('shortText').textContent = `${fmtN(short)} unit${short === 1 ? '' : 's'} short of target`;
     $('coverText').textContent = `K6 covers ${fmtN(move)}`;
     $('poText').textContent = `${fmtN(order)} need a PO`;
     $('barMove').style.flex = String(move || 0);
